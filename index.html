@@ -8,16 +8,33 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; margin: 1em; }
         .controls { margin-bottom: 1em; }
         .delete-btn { background-color: #ff4d4d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 1em; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
-        th { background-color: #f8f9fa; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; border-top: 2px solid #333; }
+        thead th { background-color: #f8f9fa; padding: 10px; border: 1px solid #ddd; }
         
-        /* ✨ 모바일 레이아웃을 위한 스타일 */
-        .stock-group-label { font-weight: bold; color: #333; }
-        .stock-group-value { color: #555; }
-        .stock-sub-value { font-size: 12px; color: #777; }
-        .reason-cell { background-color: #fdfdfd; }
-        .reason-content { font-size: 13px; line-height: 1.6; }
+        /* ✨ 1. 기본 정렬 설정: 모든 셀을 가운데 정렬 */
+        tbody td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        /* ✨ 2. 예외 정렬 설정 */
+        /* 가격 정보 (포착가, 현재가, 수익률)는 우측 정렬 */
+        .price-info {
+            text-align: right;
+        }
+        /* 분석 의견은 좌측 정렬 */
+        .reason-cell {
+            text-align: left;
+            vertical-align: top;
+            line-height: 1.6;
+        }
+
+        /* 각 종목 구분을 위한 하단 라인 */
+        .stock-item-row-2 {
+            border-bottom: 2px solid #ccc;
+        }
     </style>
 </head>
 <body>
@@ -29,6 +46,17 @@
     </div>
 
     <table id="stock-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;"><input type="checkbox" id="select-all-checkbox"></th>
+                <th style="width: 15%;">시간</th>
+                <th style="width: 15%;">종목</th>
+                <th style="width: 15%;">가격</th>
+                <th style="width: 10%;">신호/수익률</th>
+                <th style="width: 15%;">수급</th>
+                <th style="width: 25%;">분석 의견</th>
+            </tr>
+        </thead>
         <tbody>
             </tbody>
     </table>
@@ -38,15 +66,16 @@
         const getWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks';
         const deleteWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks/delete-selecte';
 
+        // (이하 JavaScript 로직은 길어서 일부 생략, 전체 코드는 아래에 있습니다)
         const countdownElement = document.getElementById('countdown');
         const statusElement = document.getElementById('status');
         const tableBody = document.querySelector('#stock-table tbody');
         let countdown = 30;
 
         function formatDateTime(dateString) {
-            if (!dateString) return '';
+            if (!dateString) return 'N/A';
             const date = new Date(dateString);
-            return date.toLocaleString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleString('ko-KR');
         }
 
         async function fetchData() {
@@ -59,7 +88,7 @@
                 const response = await fetch(getWebhookUrl);
                 const data = await response.json();
                 
-                tableBody.innerHTML = ''; // 테이블 비우기
+                tableBody.innerHTML = ''; 
 
                 data.forEach(item => {
                     if (item && item.rowIndex) {
@@ -71,35 +100,32 @@
                         const foreign = item.foreign ? parseInt(item.foreign).toLocaleString() : '0';
                         const organ = item.organ ? parseInt(item.organ).toLocaleString() : '0';
 
-                        // ✨ 2. 각 종목마다 2개의 행(row)을 생성
-                        const dataRow = `
-                            <tr>
-                                <td rowspan="2" style="vertical-align: middle; text-align: center;">
+                        // ✨ 3. 요청하신 레이아웃에 맞춰 HTML 구조 생성
+                        const row1 = `
+                            <tr class="stock-item-row-1">
+                                <td rowspan="2">
                                     <input type="checkbox" class="row-checkbox" data-id="${item.rowIndex}">
                                 </td>
-                                <td>
-                                    <div class="stock-group-label">${item.stockName}</div>
-                                    <div class="stock-sub-value">${item.stockCode}</div>
-                                </td>
-                                <td>
-                                    <div class="stock-group-label">${currentPrice}</div>
-                                    <div class="stock-sub-value">포착가: ${firstPrice}</div>
-                                </td>
-                                <td>
-                                    <div class="stock-group-label">${item.signal || 'N/A'}</div>
-                                    <div class="stock-sub-value">${performance}</div>
-                                </td>
+                                <td>${formatDateTime(item.Date)}</td>
+                                <td>${item.stockName}</td>
+                                <td class="price-info">${firstPrice}</td>
+                                <td>${item.signal || 'N/A'}</td>
+                                <td>${personal}</td>
+                                <td rowspan="2" class="reason-cell">${item.reason || '내용 없음'}</td>
                             </tr>
                         `;
-                        const reasonRow = `
-                            <tr>
-                                <td colspan="3" class="reason-cell">
-                                    <div class="stock-group-label">분석 의견</div>
-                                    <div class="reason-content">${item.reason || '내용 없음'}</div>
-                                </td>
+
+                        const row2 = `
+                            <tr class="stock-item-row-2">
+                                <td>${formatDateTime(item.updateDate)}</td>
+                                <td>${item.stockCode}</td>
+                                <td class="price-info">${currentPrice}</td>
+                                <td class="price-info">${performance}</td>
+                                <td>${foreign}<br>${organ}</td>
                             </tr>
                         `;
-                        tableBody.innerHTML += dataRow + reasonRow;
+
+                        tableBody.innerHTML += row1 + row2;
                     }
                 });
 
@@ -110,46 +136,27 @@
                         }
                     });
                 }
-
             } catch (error) {
                 console.error('데이터를 가져오는 데 실패했습니다:', error);
             }
         }
-
+        
         // (이하 삭제, 체크박스, 카운트다운 함수는 이전과 동일)
-        async function deleteSelected() { /* ... 이전 코드와 동일 ... */ }
-        document.getElementById('select-all-checkbox').addEventListener('change', function(event){ /* ... 이전 코드와 동일 ... */ });
+        async function deleteSelected() { /* ... */ }
+        document.getElementById('select-all-checkbox').addEventListener('change', function(event){ /* ... */ });
         document.getElementById('delete-selected-btn').addEventListener('click', deleteSelected);
-        function startCountdown() { /* ... 이전 코드와 동일 ... */ }
-
-        // 삭제 함수 등 생략된 부분 (이전 코드에서 복사)
+        function startCountdown() { /* ... */ }
+        
+        // --- 아래는 생략된 함수들의 전체 코드입니다 ---
         async function deleteSelected() {
             const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
-            const idsToDelete = Array.from(checkedBoxes)
-              .map(box => parseInt(box.getAttribute('data-id')))
-              .filter(id => !isNaN(id) && id !== null);
-            if (idsToDelete.length === 0) {
-                alert('삭제할 항목을 먼저 선택해주세요.');
-                return;
-            }
-            if (!confirm(`총 ${idsToDelete.length}개의 항목을 정말로 삭제하시겠습니까?`)) {
-                return;
-            }
+            const idsToDelete = Array.from(checkedBoxes).map(box => parseInt(box.getAttribute('data-id'))).filter(id => !isNaN(id) && id !== null);
+            if (idsToDelete.length === 0) { alert('삭제할 항목을 먼저 선택해주세요.'); return; }
+            if (!confirm(`총 ${idsToDelete.length}개의 항목을 정말로 삭제하시겠습니까?`)) { return; }
             try {
-                const response = await fetch(deleteWebhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids: idsToDelete })
-                });
-                if (response.ok) {
-                    alert('삭제에 성공했습니다.');
-                    fetchData();
-                } else {
-                    alert('삭제에 실패했습니다.');
-                }
-            } catch (error) {
-                console.error('삭제 요청 중 오류 발생:', error);
-            }
+                const response = await fetch(deleteWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: idsToDelete }) });
+                if (response.ok) { alert('삭제에 성공했습니다.'); fetchData(); } else { alert('삭제에 실패했습니다.'); }
+            } catch (error) { console.error('삭제 요청 중 오류 발생:', error); }
         }
         document.getElementById('select-all-checkbox').addEventListener('change', function(event) {
             const isChecked = event.target.checked;
@@ -165,10 +172,7 @@
                 if (isActiveTime) {
                     statusElement.textContent = '';
                     countdown--;
-                    if (countdown <= 0) {
-                        fetchData();
-                        countdown = 30;
-                    }
+                    if (countdown <= 0) { fetchData(); countdown = 30; }
                 } else {
                     statusElement.textContent = '(자동 갱신 비활성 시간)';
                     countdown = 30;
