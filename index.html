@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>종목 정보 관리</title>
+    <style>
+        body { font-family: sans-serif; margin: 1em; }
+        .controls { margin-bottom: 1em; }
+        .delete-btn { background-color: #ff4d4d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 1em; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; vertical-align: middle; }
+        th { background-color: #f2f2f2; }
+        td:last-child { white-space: normal; } /* 분석 의견은 줄바꿈 허용 */
+    </style>
+</head>
+<body>
+    <h1>종목 정보 관리</h1>
+    <h2>다음 갱신까지: <span id="countdown" style="color: blue;">5</span>초</h2>
+
+    <div class="controls">
+        <button id="delete-selected-btn" class="delete-btn">선택 항목 삭제</button>
+    </div>
+
+    <table id="stock-table">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="select-all-checkbox"></th>
+                <th>포착시간</th>
+                <th>최종 업데이트</th>
+                <th>종목명</th>
+                <th>종목코드</th>
+                <th>포착가</th>
+                <th>현재가</th>
+                <th>수익률</th>
+                <th>신호</th>
+                <th>분석 의견</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+
+    <script>
+        // ## URL 설정 ##
+	const getWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks';
+        const deleteWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks/delete-selecte';
+
+        const countdownElement = document.getElementById('countdown');
+        const tableBody = document.querySelector('#stock-table tbody');
+        let countdown = 5;
+
+        // ==========================================================
+        // ✨ 1. 날짜/시간 포맷팅 전용 함수 추가
+        // ==========================================================
+        function formatDateTime(dateString) {
+            if (!dateString) return ''; // 날짜 데이터가 없으면 빈 칸으로 표시
+            
+            const date = new Date(dateString);
+            
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+
+            // YYYY.MM.DD와 HH:MM:SS 사이에 줄바꿈(<br>)을 넣어 두 줄로 만듭니다.
+            return `${year}.${month}.${day}<br>${hours}:${minutes}:${seconds}`;
+        }
+
+        // 데이터 조회 함수
+        async function fetchData() {
+            const checkedIds = new Set();
+            document.querySelectorAll('.row-checkbox:checked').forEach(checkbox => {
+                checkedIds.add(checkbox.dataset.id);
+            });
+
+            try {
+                const response = await fetch(getWebhookUrl);
+                const data = await response.json();
+                
+                tableBody.innerHTML = ''; 
+
+                data.forEach(item => {
+                    if (item && item.rowIndex) {
+                        const firstPrice = item.firstPrice ? parseFloat(item.firstPrice).toLocaleString() : '';
+                        const currentPrice = item.currentPrice ? parseFloat(item.currentPrice).toLocaleString() : '';
+                        const performance = item.performance ? item.performance.toFixed(2) + '%' : '';
+
+                        const row = `<tr>
+                            <td><input type="checkbox" class="row-checkbox" data-id="${item.rowIndex}"></td>
+                            <td>${formatDateTime(item.Date)}</td>
+                            <td>${formatDateTime(item.updateDate)}</td>
+                            <td>${item.stockName}</td>
+                            <td>${item.stockCode}</td>
+                            <td>${firstPrice}</td>
+                            <td>${currentPrice}</td>
+                            <td>${performance}</td>
+                            <td>${item.signal || ''}</td>
+                            <td>${item.reason || ''}</td>
+                        </tr>`;
+                        tableBody.innerHTML += row;
+                    }
+                });
+
+                if (checkedIds.size > 0) {
+                    document.querySelectorAll('.row-checkbox').forEach(checkbox => {
+                        if (checkedIds.has(checkbox.dataset.id)) {
+                            checkbox.checked = true;
+                        }
+                    });
+                }
+
+            } catch (error) {
+                console.error('데이터를 가져오는 데 실패했습니다:', error);
+            }
+        }
+
+        // (이하 삭제, 체크박스, 카운트다운 함수는 이전과 동일)
+
+        async function deleteSelected() {
+            const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+            const idsToDelete = Array.from(checkedBoxes)
+              .map(box => parseInt(box.getAttribute('data-id')))
+              .filter(id => !isNaN(id) && id !== null);
+
+            if (idsToDelete.length === 0) {
+                alert('삭제할 항목을 먼저 선택해주세요.');
+                return;
+            }
+
+            if (!confirm(`총 ${idsToDelete.length}개의 항목을 정말로 삭제하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(deleteWebhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: idsToDelete })
+                });
+                
+                if (response.ok) {
+                    alert('삭제에 성공했습니다.');
+                    fetchData();
+                } else {
+                    alert('삭제에 실패했습니다.');
+                }
+            } catch (error) {
+                console.error('삭제 요청 중 오류 발생:', error);
+            }
+        }
+
+        document.getElementById('select-all-checkbox').addEventListener('change', function(event) {
+            const isChecked = event.target.checked;
+            document.querySelectorAll('.row-checkbox').forEach(box => box.checked = isChecked);
+        });
+
+        document.getElementById('delete-selected-btn').addEventListener('click', deleteSelected);
+
+        function startCountdown() {
+            setInterval(() => {
+                countdown--;
+                if (countdown <= 0) {
+                    fetchData();
+                    countdown = 5;
+                }
+                countdownElement.textContent = countdown;
+            }, 1000);
+        }
+
+        fetchData();
+        startCountdown();
+    </script>
+</body>
+</html>
