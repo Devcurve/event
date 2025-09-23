@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>종목 정보 관리</title>
     <style>
-        body { font-family: sans-serif; margin: 1em; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; margin: 1em; }
         .controls { margin-bottom: 1em; }
         .delete-btn { background-color: #ff4d4d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 1em; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; vertical-align: middle; }
-        th { background-color: #f2f2f2; }
-        td.numeric { text-align: right; } /* 숫자 데이터는 오른쪽 정렬 */
-        td.reason { white-space: normal; } /* 분석 의견은 줄바꿈 허용 */
-        #status { color: #888; font-size: 0.9em; margin-left: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
+        th { background-color: #f8f9fa; }
+        
+        /* ✨ 모바일 레이아웃을 위한 스타일 */
+        .stock-group-label { font-weight: bold; color: #333; }
+        .stock-group-value { color: #555; }
+        .stock-sub-value { font-size: 12px; color: #777; }
+        .reason-cell { background-color: #fdfdfd; }
+        .reason-content { font-size: 13px; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -25,52 +29,24 @@
     </div>
 
     <table id="stock-table">
-        <thead>
-            <tr>
-                <th><input type="checkbox" id="select-all-checkbox"></th>
-                <th>포착시간</th>
-                <th>최근 업데이트</th>
-                <th>종목명</th>
-                <th>종목코드</th>
-                <th>포착가</th>
-                <th>현재가</th>
-                <th>수익률</th>
-                <th>신호</th>
-                <th>개인</th>
-                <th>외국인</th>
-                <th>기관</th>
-                <th>분석 의견</th>
-            </tr>
-        </thead>
         <tbody>
             </tbody>
     </table>
 
     <script>
         // ## URL 설정 ##
-        //const getWebhookUrl = '여기에_데이터_조회용_Webhook_URL_붙여넣기';
-        //const deleteWebhookUrl = '여기에_삭제용_Webhook_URL_붙여넣기';
-	
-	const getWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks';
+        const getWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks';
         const deleteWebhookUrl = 'https://workflow.i234.me:8808/webhook/api/stocks/delete-selecte';
 
         const countdownElement = document.getElementById('countdown');
         const statusElement = document.getElementById('status');
         const tableBody = document.querySelector('#stock-table tbody');
-        
-        // ✨ 2. 카운트다운 시작 숫자 변경
         let countdown = 30;
 
         function formatDateTime(dateString) {
             if (!dateString) return '';
             const date = new Date(dateString);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            return `${year}.${month}.${day}<br>${hours}:${minutes}:${seconds}`;
+            return date.toLocaleString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
 
         async function fetchData() {
@@ -83,34 +59,47 @@
                 const response = await fetch(getWebhookUrl);
                 const data = await response.json();
                 
-                tableBody.innerHTML = ''; 
+                tableBody.innerHTML = ''; // 테이블 비우기
 
                 data.forEach(item => {
                     if (item && item.rowIndex) {
-                        const firstPrice = item.firstPrice ? parseFloat(item.firstPrice).toLocaleString() : '';
-                        const currentPrice = item.currentPrice ? parseFloat(item.currentPrice).toLocaleString() : '';
-                        const performance = item.performance ? item.performance.toFixed(2) + '%' : '';
-                        
+                        // 데이터 포맷팅
+                        const firstPrice = item.firstPrice ? parseFloat(item.firstPrice).toLocaleString() : 'N/A';
+                        const currentPrice = item.currentPrice ? parseFloat(item.currentPrice).toLocaleString() : 'N/A';
+                        const performance = item.performance ? item.performance.toFixed(2) + '%' : 'N/A';
                         const personal = item.personal ? parseInt(item.personal).toLocaleString() : '0';
                         const foreign = item.foreign ? parseInt(item.foreign).toLocaleString() : '0';
                         const organ = item.organ ? parseInt(item.organ).toLocaleString() : '0';
 
-                        const row = `<tr>
-                            <td><input type="checkbox" class="row-checkbox" data-id="${item.rowIndex}"></td>
-                            <td>${formatDateTime(item.Date)}</td>
-                            <td>${formatDateTime(item.updateDate)}</td>
-                            <td>${item.stockName}</td>
-                            <td>${item.stockCode}</td>
-                            <td class="numeric">${firstPrice}</td>
-                            <td class="numeric">${currentPrice}</td>
-                            <td class="numeric">${performance}</td>
-                            <td>${item.signal || ''}</td>
-                            <td class="numeric">${personal}</td>
-                            <td class="numeric">${foreign}</td>
-                            <td class="numeric">${organ}</td>
-                            <td class="reason">${item.reason || ''}</td>
-                        </tr>`;
-                        tableBody.innerHTML += row;
+                        // ✨ 2. 각 종목마다 2개의 행(row)을 생성
+                        const dataRow = `
+                            <tr>
+                                <td rowspan="2" style="vertical-align: middle; text-align: center;">
+                                    <input type="checkbox" class="row-checkbox" data-id="${item.rowIndex}">
+                                </td>
+                                <td>
+                                    <div class="stock-group-label">${item.stockName}</div>
+                                    <div class="stock-sub-value">${item.stockCode}</div>
+                                </td>
+                                <td>
+                                    <div class="stock-group-label">${currentPrice}</div>
+                                    <div class="stock-sub-value">포착가: ${firstPrice}</div>
+                                </td>
+                                <td>
+                                    <div class="stock-group-label">${item.signal || 'N/A'}</div>
+                                    <div class="stock-sub-value">${performance}</div>
+                                </td>
+                            </tr>
+                        `;
+                        const reasonRow = `
+                            <tr>
+                                <td colspan="3" class="reason-cell">
+                                    <div class="stock-group-label">분석 의견</div>
+                                    <div class="reason-content">${item.reason || '내용 없음'}</div>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.innerHTML += dataRow + reasonRow;
                     }
                 });
 
@@ -121,33 +110,37 @@
                         }
                     });
                 }
+
             } catch (error) {
                 console.error('데이터를 가져오는 데 실패했습니다:', error);
             }
         }
 
+        // (이하 삭제, 체크박스, 카운트다운 함수는 이전과 동일)
+        async function deleteSelected() { /* ... 이전 코드와 동일 ... */ }
+        document.getElementById('select-all-checkbox').addEventListener('change', function(event){ /* ... 이전 코드와 동일 ... */ });
+        document.getElementById('delete-selected-btn').addEventListener('click', deleteSelected);
+        function startCountdown() { /* ... 이전 코드와 동일 ... */ }
+
+        // 삭제 함수 등 생략된 부분 (이전 코드에서 복사)
         async function deleteSelected() {
             const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
             const idsToDelete = Array.from(checkedBoxes)
               .map(box => parseInt(box.getAttribute('data-id')))
               .filter(id => !isNaN(id) && id !== null);
-
             if (idsToDelete.length === 0) {
                 alert('삭제할 항목을 먼저 선택해주세요.');
                 return;
             }
-
             if (!confirm(`총 ${idsToDelete.length}개의 항목을 정말로 삭제하시겠습니까?`)) {
                 return;
             }
-
             try {
                 const response = await fetch(deleteWebhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ids: idsToDelete })
                 });
-                
                 if (response.ok) {
                     alert('삭제에 성공했습니다.');
                     fetchData();
@@ -158,36 +151,28 @@
                 console.error('삭제 요청 중 오류 발생:', error);
             }
         }
-
         document.getElementById('select-all-checkbox').addEventListener('change', function(event) {
             const isChecked = event.target.checked;
             document.querySelectorAll('.row-checkbox').forEach(box => box.checked = isChecked);
         });
-
         document.getElementById('delete-selected-btn').addEventListener('click', deleteSelected);
-
         function startCountdown() {
             setInterval(() => {
                 const now = new Date();
                 const hour = now.getHours();
                 const minute = now.getMinutes();
-
                 const isActiveTime = (hour > 8 || (hour === 8 && minute >= 30)) && hour < 20;
-
                 if (isActiveTime) {
                     statusElement.textContent = '';
                     countdown--;
                     if (countdown <= 0) {
                         fetchData();
-                        // ✨ 3. 카운트다운 리셋 숫자 변경
                         countdown = 30;
                     }
                 } else {
                     statusElement.textContent = '(자동 갱신 비활성 시간)';
-                    // ✨ 4. 비활성 시간의 카운트다운도 변경
                     countdown = 30;
                 }
-                
                 countdownElement.textContent = countdown;
             }, 1000);
         }
